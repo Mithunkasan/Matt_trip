@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  password      String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  memberships   Member[]
+  paidExpenses  Expense[] @relation("ExpensePayer")
+  splitsOwed    ExpenseSplit[]
+
+  sentSettlements Settlement[] @relation("SettlementSender")
+  receivedSettlements Settlement[] @relation("SettlementReceiver")
+
+  notifications Notification[]
+  activities    ActivityLog[]
+}
+
+model Team {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  avatar      String?
+  inviteCode  String    @unique @default(uuid())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  members     Member[]
+  expenses    Expense[]
+  settlements Settlement[]
+  activities  ActivityLog[]
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  MEMBER
+}
+
+model Member {
+  id        String   @id @default(uuid())
+  role      Role     @default(MEMBER)
+  joinedAt  DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+}
+
+enum Category {
+  FOOD
+  TRAVEL
+  HOTEL
+  FUEL
+  SHOPPING
+  ENTERTAINMENT
+  OTHER
+}
+
+model Expense {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  amount      Float
+  date        DateTime  @default(now())
+  category    Category  @default(OTHER)
+  receiptUrl  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  paidById    String
+  paidBy      User      @relation("ExpensePayer", fields: [paidById], references: [id], onDelete: Restrict)
+
+  teamId      String
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  splits      ExpenseSplit[]
+}
+
+model ExpenseSplit {
+  id          String    @id @default(uuid())
+  amountOwed  Float
+
+  expenseId   String
+  expense     Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, userId])
+}
+
+enum SettlementStatus {
+  PENDING
+  PARTIAL
+  COMPLETED
+}
+
+model Settlement {
+  id          String           @id @default(uuid())
+  amount      Float
+  status      SettlementStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  fromUserId  String
+  fromUser    User             @relation("SettlementSender", fields: [fromUserId], references: [id], onDelete: Restrict)
+
+  toUserId    String
+  toUser      User             @relation("SettlementReceiver", fields: [toUserId], references: [id], onDelete: Restrict)
+
+  teamId      String
+  team        Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  content   String
+  type      String   // e.g. "EXPENSE_ADDED", "SETTLED", "MEMBER_JOINED"
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  action    String   // e.g. "CREATED_EXPENSE"
+  details   String?  // JSON string or extra info
+  createdAt DateTime @default(now())
+
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
