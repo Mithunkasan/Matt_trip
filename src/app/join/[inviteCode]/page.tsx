@@ -1,12 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Users, CheckCircle2, LogIn, Loader2, AlertCircle } from "lucide-react";
+import {
+  Users,
+  CheckCircle2,
+  LogIn,
+  Loader2,
+  AlertCircle,
+  UserPlus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import { use } from "react";
 
 interface TeamPreview {
@@ -15,6 +24,8 @@ interface TeamPreview {
   description: string | null;
   memberCount: number;
 }
+
+type AuthTab = "signin" | "register";
 
 export default function JoinTeamPage({ params }: { params: Promise<{ inviteCode: string }> }) {
   const { inviteCode } = use(params);
@@ -26,6 +37,13 @@ export default function JoinTeamPage({ params }: { params: Promise<{ inviteCode:
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Inline auth form state
+  const [authTab, setAuthTab] = useState<AuthTab>("signin");
+  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
 
   // Fetch team preview
   useEffect(() => {
@@ -40,12 +58,8 @@ export default function JoinTeamPage({ params }: { params: Promise<{ inviteCode:
       .finally(() => setLoading(false));
   }, [inviteCode]);
 
-  async function handleJoin() {
-    if (!session) {
-      // Redirect to login then back
-      router.push(`/login?callbackUrl=/join/${inviteCode}`);
-      return;
-    }
+  /** Join the team using the current session (must be signed in). */
+  async function joinTeam() {
     setJoining(true);
     try {
       const res = await fetch("/api/teams/join", {
@@ -61,6 +75,79 @@ export default function JoinTeamPage({ params }: { params: Promise<{ inviteCode:
       setError(e instanceof Error ? e.message : "Failed to join team");
     } finally {
       setJoining(false);
+    }
+  }
+
+  /** Called when the user clicks "Join Team" while already authenticated. */
+  async function handleJoin() {
+    if (!session) {
+      router.push(`/login?callbackUrl=/join/${inviteCode}`);
+      return;
+    }
+    await joinTeam();
+  }
+
+  /** Sign in with credentials then auto-join the team. */
+  async function handleSignIn(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthLoading(true);
+    try {
+      const res = await signIn("credentials", {
+        redirect: false,
+        email: authEmail,
+        password: authPassword,
+      });
+
+      if (res?.error) {
+        toast.error("Invalid email or password. Please try again.");
+        return;
+      }
+
+      toast.success("Signed in! Joining the team…");
+      await joinTeam();
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  /** Register a new account, auto-sign-in, then auto-join the team. */
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    if (!authName.trim()) {
+      toast.error("Please enter your full name.");
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      // 1. Create account
+      const regRes = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: authName, email: authEmail, password: authPassword }),
+      });
+      if (!regRes.ok) {
+        const data = await regRes.json();
+        toast.error(data.message || "Registration failed. Please try again.");
+        return;
+      }
+
+      // 2. Auto sign-in
+      const signInRes = await signIn("credentials", {
+        redirect: false,
+        email: authEmail,
+        password: authPassword,
+      });
+      if (signInRes?.error) {
+        toast.error("Account created but sign-in failed. Please sign in manually.");
+        router.push(`/login?callbackUrl=/join/${inviteCode}`);
+        return;
+      }
+
+      toast.success("Account created! Joining the team…");
+      // 3. Auto-join
+      await joinTeam();
+    } finally {
+      setAuthLoading(false);
     }
   }
 
@@ -144,7 +231,7 @@ export default function JoinTeamPage({ params }: { params: Promise<{ inviteCode:
                   </div>
                 </div>
 
-                {/* CTA */}
+                {/* CTA — authenticated */}
                 {status === "authenticated" ? (
                   <Button className="w-full h-12 text-base gap-2" onClick={handleJoin} disabled={joining}>
                     {joining ? (
@@ -154,16 +241,141 @@ export default function JoinTeamPage({ params }: { params: Promise<{ inviteCode:
                     )}
                   </Button>
                 ) : (
-                  <div className="space-y-3">
+                  /* CTA — unauthenticated: inline credential form */
+                  <div className="space-y-4">
                     <p className="text-center text-sm text-muted-foreground">
-                      You need to be signed in to join this team.
+                      Sign in or create an account to join this team.
                     </p>
-                    <Button className="w-full h-12 text-base gap-2" onClick={handleJoin}>
-                      <LogIn className="h-5 w-5" /> Sign In to Join
-                    </Button>
-                    <Link href={`/register?callbackUrl=/join/${inviteCode}`}>
-                      <Button variant="outline" className="w-full h-11">Create Account Instead</Button>
-                    </Link>
+
+                    {/* Tab switcher */}
+                    <div className="flex rounded-lg border overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setAuthTab("signin")}
+                        className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                          authTab === "signin"
+                            ? "bg-primary text-white"
+                            : "bg-background text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        Sign In
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAuthTab("register")}
+                        className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                          authTab === "register"
+                            ? "bg-primary text-white"
+                            : "bg-background text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        Register
+                      </button>
+                    </div>
+
+                    {/* Sign In form */}
+                    {authTab === "signin" && (
+                      <form onSubmit={handleSignIn} className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-700" htmlFor="signin-email">
+                            Email
+                          </label>
+                          <Input
+                            id="signin-email"
+                            type="email"
+                            placeholder="you@example.com"
+                            value={authEmail}
+                            onChange={(e) => setAuthEmail(e.target.value)}
+                            required
+                            disabled={authLoading}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-700" htmlFor="signin-password">
+                            Password
+                          </label>
+                          <Input
+                            id="signin-password"
+                            type="password"
+                            placeholder="Your password"
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            required
+                            disabled={authLoading}
+                          />
+                        </div>
+                        <Button
+                          type="submit"
+                          className="w-full h-11 text-sm gap-2"
+                          disabled={authLoading}
+                        >
+                          {authLoading ? (
+                            <><Loader2 className="h-4 w-4 animate-spin" /> Signing in…</>
+                          ) : (
+                            <><LogIn className="h-4 w-4" /> Sign In &amp; Join {team.name}</>
+                          )}
+                        </Button>
+                      </form>
+                    )}
+
+                    {/* Register form */}
+                    {authTab === "register" && (
+                      <form onSubmit={handleRegister} className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-700" htmlFor="reg-name">
+                            Full Name
+                          </label>
+                          <Input
+                            id="reg-name"
+                            type="text"
+                            placeholder="John Doe"
+                            value={authName}
+                            onChange={(e) => setAuthName(e.target.value)}
+                            required
+                            disabled={authLoading}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-700" htmlFor="reg-email">
+                            Email
+                          </label>
+                          <Input
+                            id="reg-email"
+                            type="email"
+                            placeholder="you@example.com"
+                            value={authEmail}
+                            onChange={(e) => setAuthEmail(e.target.value)}
+                            required
+                            disabled={authLoading}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-700" htmlFor="reg-password">
+                            Password
+                          </label>
+                          <Input
+                            id="reg-password"
+                            type="password"
+                            placeholder="Create a password"
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            required
+                            disabled={authLoading}
+                          />
+                        </div>
+                        <Button
+                          type="submit"
+                          className="w-full h-11 text-sm gap-2"
+                          disabled={authLoading}
+                        >
+                          {authLoading ? (
+                            <><Loader2 className="h-4 w-4 animate-spin" /> Creating account…</>
+                          ) : (
+                            <><UserPlus className="h-4 w-4" /> Register &amp; Join {team.name}</>
+                          )}
+                        </Button>
+                      </form>
+                    )}
                   </div>
                 )}
               </div>
