@@ -42,14 +42,14 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4 bg-muted/30">
-      <Card className="w-full max-w-md shadow-xl border-border/50">
+      <Card className="w-full max-w-md shadow-xl border-border/50 animate-scale-in card-hover">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold tracking-tight">Create an account</CardTitle>
-          <CardDescription>Enter your details below to create your account.</CardDescription>
+          <CardTitle className="text-2xl font-bold tracking-tight animate-slide-down">Create an account</CardTitle>
+          <CardDescription className="animate-fade-in delay-100">Enter your details below to create your account.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-2 animate-slide-up delay-150">
               <label className="text-sm font-medium" htmlFor="name">Full Name</label>
               <Input
                 id="name"
@@ -58,9 +58,10 @@ export default function RegisterPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+                className="transition-shadow duration-200 focus:shadow-md"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 animate-slide-up delay-200">
               <label className="text-sm font-medium" htmlFor="email">Email</label>
               <Input
                 id="email"
@@ -69,9 +70,10 @@ export default function RegisterPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                className="transition-shadow duration-200 focus:shadow-md"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 animate-slide-up delay-300">
               <label className="text-sm font-medium" htmlFor="password">Password</label>
               <Input
                 id="password"
@@ -79,16 +81,17 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                className="transition-shadow duration-200 focus:shadow-md"
               />
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <Button className="w-full" type="submit" disabled={loading}>
+          <CardFooter className="flex flex-col space-y-4 animate-slide-up delay-400">
+            <Button className="w-full btn-press" type="submit" disabled={loading}>
               {loading ? "Creating account..." : "Create account"}
             </Button>
             <div className="text-sm text-center text-muted-foreground">
               Already have an account?{" "}
-              <Link href="/login" className="text-primary hover:underline">
+              <Link href="/login" className="text-primary hover:underline transition-colors">
                 Login
               </Link>
             </div>
